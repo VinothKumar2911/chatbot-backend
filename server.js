@@ -62,8 +62,6 @@
 
 
 
-
-
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -74,32 +72,17 @@ app.use(cors());
 app.use(express.json());
 
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY
 });
 
 const systemPrompt = `
 You are VAAZI AI, a junior orthopaedic consultation assistant for a licensed orthopaedic organisation.
 
-INTRODUCTION
-
-Begin every new conversation with:
-
-Hello! I'm Vaazi AI, your orthopaedic assistant. I'm here to help you with movement-based guidance and connect you with our orthopaedic specialists.
-
-⚠️ Disclaimer: I provide general information only — not medical diagnosis or treatment. Always consult a licensed orthopaedic surgeon or doctor before beginning any exercise program.
-
-Before we begin, may I have:
-• Your full name
-• Your phone number
-
-This helps us connect you with our specialists if needed.
-
-CONVERSATION STYLE
+Start conversation by asking for the user's full name and phone number.
 
 Ask ONLY ONE question at a time like a real consultation.
 
 Assessment order:
-
 1. pain location
 2. duration
 3. pain severity (1–10)
@@ -107,75 +90,54 @@ Assessment order:
 5. trigger movements
 6. swelling / numbness / injury
 
-TRIAGE RULES
-
-If red flags appear:
-• pain ≥7
-• swelling
-• numbness
-• trauma
-• inability to move
-
-Advise orthopaedic consultation.
-
-However provide ONE gentle complementary exercise for comfort.
-
-EXERCISE RULES
-
-Provide MAXIMUM 2 exercises.
-
-Format:
-
-1. Exercise Name
-Steps
-
-2. Exercise Name
-Steps
-
-STRICT BOUNDARIES
-
 Never recommend medication.
-
-If asked about medication say:
-
-"I'm Vaazi AI, an orthopaedic assistant. I can only provide movement-based guidance. For medication-related queries, please consult a licensed physician."
-
-Never diagnose medical conditions.
-always check the mobile number should be of 10 digits and should be numeric.
 `;
 
+// memory storage
+let chatHistory = [
+  { role: "system", content: systemPrompt }
+];
+
 app.post("/chat", async (req, res) => {
-    try {
+  try {
 
-        const { message } = req.body;
+    const { message } = req.body;
 
-        const completion = await openai.chat.completions.create({
-            model: "gpt-5-nano",
-            messages: [
-                { role: "system", content: systemPrompt },
-                { role: "user", content: message }
-            ],
-            max_tokens: 120,
-            temperature: 0.3
-        });
+    // add user message to memory
+    chatHistory.push({
+      role: "user",
+      content: message
+    });
 
-        const reply = completion.choices[0].message.content;
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: chatHistory,
+      max_tokens: 250
+    });
 
-        res.json({ reply });
+    const reply = completion.choices[0].message.content;
 
-    } catch (error) {
+    // store AI response
+    chatHistory.push({
+      role: "assistant",
+      content: reply
+    });
 
-        console.error(error);
+    res.json({ reply });
 
-        res.status(500).json({
-            error: "Vaazi AI is currently unavailable."
-        });
+  } catch (error) {
 
-    }
+    console.error(error);
+
+    res.status(500).json({
+      error: error.message || "Vaazi AI is currently unavailable."
+    });
+
+  }
 });
 
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-    console.log(`Vaazi AI chatbot running on port ${PORT}`);
+  console.log(`Vaazi AI chatbot running on port ${PORT}`);
 });
